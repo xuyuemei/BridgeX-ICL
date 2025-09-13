@@ -31,12 +31,12 @@ for lang_idx in range(lang_num):
     selected_ids[lang_idx] = list(zip(selected_neurons[0].tolist(), selected_neurons[1].tolist()))
 
 for lang_idx, neuron_ids in selected_ids.items():
-    with open(f'top_neuron/top_neurons_{langs[lang_idx]}.txt', 'w') as f:
+    with open(f'llama_neuron/top_neurons_{langs[lang_idx]}.txt', 'w') as f:
         f.writelines(f"({l}, {n})\n" for l, n in neuron_ids)
 
 def save_neuron_ids_with_probs(selected_ids, activation_probs):
     for lang_idx, neuron_ids in selected_ids.items():
-        with open(f'top_neuron/top_neurons_with_probs_{langs[lang_idx]}.txt', 'w') as f:
+        with open(f'llama_neuron/top_neurons_with_probs_{langs[lang_idx]}.txt', 'w') as f:
             for l, n in neuron_ids:
                 f.write(f"({l},{n}), {activation_probs[l, n, lang_idx].item()}\n")
 
