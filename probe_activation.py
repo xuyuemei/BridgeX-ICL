@@ -71,5 +71,5 @@ for layer in range(num_layers):
     activation_freq_normalized[layer] = activation_freq[layer] / (layer_token_counts[layer].view(1, -1) + 1e-10)
 
 
-save_path = f"try_bli/activation_value_{args.src_lang}_{args.trg_lang}_llama.pt"
+save_path = f"bli_activation/activation_value_{args.src_lang}_{args.trg_lang}_llama.pt"
 torch.save(activation_freq_normalized, save_path)
