@@ -3,7 +3,7 @@ import ast
 from collections import defaultdict
 import argparse
 import os
-def load_neuron_list(file_path):
+def load_neuron(file_path):
     with open(file_path, 'r') as f:
         return [ast.literal_eval(line.strip()) for line in f if line.strip()]
 
@@ -21,7 +21,7 @@ def extract_submatrix_by_layer(layer_map, activation_freq):
     return layer_matrices
 
 
-def compute_hsic_similarity(mat1, mat2, sigma=None):
+def compute_hsic(mat1, mat2, sigma=None):
     mat1 = (mat1 - mat1.mean(dim=1, keepdim=True)) / (mat1.std(dim=1, keepdim=True) + 1e-6)
     mat2 = (mat2 - mat2.mean(dim=1, keepdim=True)) / (mat2.std(dim=1, keepdim=True) + 1e-6)
 
@@ -35,7 +35,7 @@ def compute_hsic_similarity(mat1, mat2, sigma=None):
         dist_y = torch.cdist(y, y).view(-1)
         sigma = torch.median(torch.cat([dist_x, dist_y])).item() + 1e-6
 
-    # [n_samples, n_samples] 
+    # [n_samples, n_samples]
     H = torch.eye(n_samples, device=mat1.device) - (1.0 / n_samples) * torch.ones(n_samples, n_samples,
                                                                                   device=mat1.device)
 
@@ -67,7 +67,7 @@ def compute_hsic_similarity(mat1, mat2, sigma=None):
 
 
 
-def compute_layerwise_similarity(specific_mats, overlap_mats, sim_func, device):
+def compute_layerwise_sim(specific_mats, overlap_mats, sim_func, device):
     sims = []
     for layer in sorted(set(specific_mats) & set(overlap_mats)):
         mat1 = specific_mats[layer].to(device)
@@ -79,7 +79,7 @@ def compute_layerwise_similarity(specific_mats, overlap_mats, sim_func, device):
     return sims, mean_sim
 
 
-def save_results_to_txt(layer_sims_dict, total_layers, bridge_langs, filename):
+def save_result(layer_sims_dict, total_layers, bridge_langs, filename):
     with open(filename, 'w') as f:
 
         header = "\t".join(["Layer"] + bridge_langs + ["Ranking"])
@@ -96,36 +96,14 @@ def save_results_to_txt(layer_sims_dict, total_layers, bridge_langs, filename):
             f.write(f"{layer}\t{sims_str}\t{layer_ranking}\n")
 
 
-        avg_sims = {}
-        for lang in bridge_langs:
-            sims = [layer_sims_dict.get((layer, lang), 0.0) for layer in range(total_layers)]
-            avg_sims[lang] = sum(sims) / len([s for s in sims if s != 0.0]) if any(s != 0.0 for s in sims) else 0.0
-        sorted_langs = sorted(avg_sims.items(), key=lambda x: x[1], reverse=True)
-        ranking = ">".join([lang for lang, _ in sorted_langs])
-        f.write(f"Average\t{ranking}\n")
-
-def compute_average_similarity(layer_sims_dict, bridge_langs, start_layer=10, end_layer=21):
-    avg_sims = {}
-    for lang in bridge_langs:
-        sims = [layer_sims_dict.get((layer, lang), 0.0) for layer in range(start_layer, end_layer + 1)]
-        valid_sims = [s for s in sims if s != 0.0]
-        avg_sims[lang] = sum(valid_sims) / len(valid_sims) if valid_sims else 0.0
-
-    sorted_langs = sorted(avg_sims.items(), key=lambda x: x[1], reverse=True)
-
-    print(f"\n=== Average similarity from layer {start_layer} to {end_layer} ===")
-    for rank, (lang, sim) in enumerate(sorted_langs, 1):
-        print(f"{rank}. {lang}: {sim:.6f}")
-
-    return sorted_langs
-
 def main():
-    parser = argparse.ArgumentParser(description="Compute neuron activation similarities between languages.")
-    parser.add_argument("--source", default='id', help="Source language code")
+    parser = argparse.ArgumentParser(description="Compute HSIC")
+    parser.add_argument("--source", default='zh', help="Source language code")
     parser.add_argument("--target", default='he', help="Target language code")
-    parser.add_argument("--langs", nargs='+', default=['en','de', 'fr', 'it', 'pt', 'es'],
+    parser.add_argument("--langs", nargs='+', default=['en','de', 'fr', 'it', 'pt', 'es'],  #'en',
                         help="Bridge languages list")
-    parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--gpu", type=int, default=0, help="Specify the GPU to use (default: 0)")
+
     args = parser.parse_args()
 
     source_lang = args.source
@@ -133,36 +111,37 @@ def main():
     bridge_langs = args.langs
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     layer_sims_dict = {}
+
+
     for bridge_lang in bridge_langs:
-        activation_file = f"./bli_activation/activation_value_{source_lang}_{target_lang}_llama.pt"
-        overlap_file = f"./llama_neuron/top_neurons_{source_lang}_{target_lang}.txt"
-        bridge_file = f"./llama_neuron/top_neurons_{bridge_lang}_specific_bridge_{source_lang}_{target_lang}_k.txt"
+        activation_file = f"./bli_activation/activation_value_{source_lang}_{target_lang}_llama.pt"  #_mis
+        specific_file = f"./top_neuron/top_neurons_{source_lang}_{target_lang}.txt"
+        overlap_file = f"./top_neuron/top_neurons_{bridge_lang}_specific_bridge_{source_lang}_{target_lang}_k.txt"
 
-        activation_freq = torch.load(activation_file)
-        bridge_neurons = load_neuron_list(bridge_file)
-        overlap_neurons = load_neuron_list(overlap_file)
 
-        bridge_dict = group_neurons_by_layer(bridge_neurons)
+        activation_freq = torch.load(activation_file)  # [num_layers, intermediate_size, num_samples]
+        specific_neurons = load_neuron(specific_file)
+        overlap_neurons = load_neuron(overlap_file)
+
+        specific_dict = group_neurons_by_layer(specific_neurons)
         overlap_dict = group_neurons_by_layer(overlap_neurons)
 
-        specific_layer_mats = extract_submatrix_by_layer(bridge_dict, activation_freq)
+        specific_layer_mats = extract_submatrix_by_layer(specific_dict, activation_freq)
         overlap_layer_mats = extract_submatrix_by_layer(overlap_dict, activation_freq)
 
+        total_layers = activation_freq.shape[0]
 
+        layerwise_sims, mean_sim = compute_layerwise_sim(
+            specific_layer_mats, overlap_layer_mats, compute_hsic, device)
 
-        layerwise_sims, mean_sim = compute_layerwise_similarity(specific_layer_mats, overlap_layer_mats,
-                                                                compute_hsic_similarity,device)
-        for i, (layer) in enumerate(sorted(set(specific_layer_mats) & set(overlap_layer_mats))):
-            layer_sims_dict[(layer, bridge_lang)] = layerwise_sims[i]
-    total_layers = activation_freq.shape[0]
-    save_results_to_txt(layer_sims_dict, total_layers, bridge_langs,
-                        f"./llama_result/{source_lang}_{target_lang}_bridge.txt")
+        for layer, sim in enumerate(layerwise_sims):
+            layer_sims_dict[(layer, bridge_lang)] = sim
 
-
-    compute_average_similarity(layer_sims_dict, bridge_langs, start_layer=10, end_layer=21)
+    save_result(layer_sims_dict, total_layers, bridge_langs, f"./try_result/{source_lang}_{target_lang}_bridge.txt")
 
 if __name__ == "__main__":
     main()
