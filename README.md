@@ -12,4 +12,5 @@ python language_similarity.py
 ### Bridge Language Selection
 ```bash
 python probe_activation.py --src_lang zh --trg_lang ja
-python bridge.py --src_lang zh --trg_lang ja
+python bridge_hsic.py --source zh --target ja
+python best_bridge.py --source zh --target ja
