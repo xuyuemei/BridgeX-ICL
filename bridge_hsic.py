@@ -119,8 +119,8 @@ def main():
 
     for bridge_lang in bridge_langs:
         activation_file = f"./bli_activation/activation_value_{source_lang}_{target_lang}_llama.pt"  #_mis
-        specific_file = f"./top_neuron/top_neurons_{source_lang}_{target_lang}.txt"
-        overlap_file = f"./top_neuron/top_neurons_{bridge_lang}_specific_bridge_{source_lang}_{target_lang}_k.txt"
+        specific_file = f"./llama_neuron/top_neurons_{source_lang}_{target_lang}.txt"
+        overlap_file = f"./llama_neuron/top_neurons_{bridge_lang}_specific_bridge_{source_lang}_{target_lang}_k.txt"
 
 
         activation_freq = torch.load(activation_file)  # [num_layers, intermediate_size, num_samples]
@@ -141,7 +141,7 @@ def main():
         for layer, sim in enumerate(layerwise_sims):
             layer_sims_dict[(layer, bridge_lang)] = sim
 
-    save_result(layer_sims_dict, total_layers, bridge_langs, f"./try_result/{source_lang}_{target_lang}_bridge.txt")
+    save_result(layer_sims_dict, total_layers, bridge_langs, f"./llama_result/{source_lang}_{target_lang}_bridge.txt")
 
 if __name__ == "__main__":
     main()
